@@ -50,13 +50,33 @@ MAX_TARGET = 0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff 
 #   FORK_HEIGHT, POW_LIMIT_PREFORK, POW_LIMIT_POSTFORK
 # Falls back to MAX_TARGET if custom constants are not present.
 
-def get_max_target_for_height(height: Optional[int]) -> int:
-    fork_h = getattr(constants.net, 'FORK_HEIGHT', None)
-    pre = getattr(constants.net, 'POW_LIMIT_PREFORK', MAX_TARGET)
-    post = getattr(constants.net, 'POW_LIMIT_POSTFORK', pre)
-    if fork_h is None or height is None:
-        return pre
-    return post if height >= fork_h else pre
+#def get_max_target_for_height(height: Optional[int]) -> int:
+#    fork_h = getattr(constants.net, 'FORK_HEIGHT', None)
+#    pre = getattr(constants.net, 'POW_LIMIT_PREFORK', MAX_TARGET)
+#    post = getattr(constants.net, 'POW_LIMIT_POSTFORK', pre)
+#    if fork_h is None or height is None:
+#        return pre
+#    return post if height >= fork_h else pre
+def get_max_target_for_height(height: int) -> int:
+    """
+    Return the network-defined powLimit for the *given height*.
+    Pre-fork:  constants.net.POW_LIMIT_PREFORK
+    Post-fork: constants.net.POW_LIMIT_POSTFORK
+    """
+    fork_h = getattr(constants.net, "FORK_HEIGHT", None)
+    if fork_h is None:
+        # Fallback: if no fork height configured, treat as pre-fork limit
+        return constants.net.POW_LIMIT_PREFORK
+    return (constants.net.POW_LIMIT_PREFORK
+            if height < fork_h
+            else constants.net.POW_LIMIT_POSTFORK)
+
+
+assert get_max_target_for_height(0) == constants.net.POW_LIMIT_PREFORK
+assert get_max_target_for_height(getattr(constants.net, "FORK_HEIGHT", 10**9)) == constants.net.POW_LIMIT_POSTFORK
+
+
+
 # ---------------------------------------------------------------------------
 
 
