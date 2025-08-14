@@ -148,6 +148,7 @@ class BitcoinMainnet(AbstractNet):
     GENESIS = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
     DEFAULT_PORTS = {'t': '50001', 's': '50002'}
     BLOCK_HEIGHT_FIRST_LIGHTNING_CHANNELS = 497000
+    HEADERS_URL = None
 
     XPRV_HEADERS = {
         'standard':    0x0488ade4,  # xprv
@@ -259,4 +260,4 @@ assert len(NETS_LIST) == len(set([chain.cli_flag() for chain in NETS_LIST])), "c
 assert len(NETS_LIST) == len(set([chain.config_key() for chain in NETS_LIST])), "config_key must be unique for each concrete AbstractNet"
 
 # don't import net directly, import the module instead (so that net is singleton)
-net = BitcoinMainnet  # type: Type[AbstractNet]
+net = BitcoinMainnet # type: Type[AbstractNet]
