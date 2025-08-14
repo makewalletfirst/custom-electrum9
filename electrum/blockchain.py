@@ -41,7 +41,23 @@ HEADER_SIZE = 80  # bytes
 CHUNK_SIZE = 2016  # num headers in a difficulty retarget period
 
 # see https://github.com/bitcoin/bitcoin/blob/feedb9c84e72e4fff489810a2bbeec09bcda5763/src/chainparams.cpp#L76
+# NOTE: kept for compatibility/fallback only. Do NOT use directly for consensus checks.
 MAX_TARGET = 0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff  # compact: 0x1d00ffff
+
+
+# --- powLimit selection based on height (fork-aware) -------------------------
+# Uses values provided by constants.net:
+#   FORK_HEIGHT, POW_LIMIT_PREFORK, POW_LIMIT_POSTFORK
+# Falls back to MAX_TARGET if custom constants are not present.
+
+def get_max_target_for_height(height: Optional[int]) -> int:
+    fork_h = getattr(constants.net, 'FORK_HEIGHT', None)
+    pre = getattr(constants.net, 'POW_LIMIT_PREFORK', MAX_TARGET)
+    post = getattr(constants.net, 'POW_LIMIT_POSTFORK', pre)
+    if fork_h is None or height is None:
+        return pre
+    return post if height >= fork_h else pre
+# ---------------------------------------------------------------------------
 
 
 class MissingHeader(Exception):
@@ -304,7 +320,7 @@ class Blockchain(Logger):
         self._size = os.path.getsize(p)//HEADER_SIZE if os.path.exists(p) else 0
 
     @classmethod
-    def verify_header(cls, header: dict, prev_hash: str, target: int, expected_header_hash: str=None) -> None:
+    def verify_header(cls, header: dict, prev_hash: str, target: int, expected_header_hash: str=None, height: int=None) -> None:
         _hash = hash_header(header)
         if expected_header_hash and expected_header_hash != _hash:
             raise InvalidHeader("hash mismatches with expected: {} vs {}".format(expected_header_hash, _hash))
@@ -315,6 +331,12 @@ class Blockchain(Logger):
         bits = cls.target_to_bits(target)
         if bits != header.get('bits'):
             raise InvalidHeader("bits mismatch: %s vs %s" % (bits, header.get('bits')))
+
+        # Height-aware powLimit check
+        max_target = get_max_target_for_height(height)
+        if target > max_target:
+            raise InvalidHeader(f"invalid header: target {hex(target)} > powLimit {hex(max_target)} at height {height}")
+
         _pow_hash = pow_hash_header(header)
         pow_hash_as_num = int.from_bytes(bfh(_pow_hash), byteorder='big')
         if pow_hash_as_num > target:
@@ -333,7 +355,7 @@ class Blockchain(Logger):
                 expected_header_hash = None
             raw_header = data[i*HEADER_SIZE : (i+1)*HEADER_SIZE]
             header = deserialize_header(raw_header, index*CHUNK_SIZE + i)
-            self.verify_header(header, prev_hash, target, expected_header_hash)
+            self.verify_header(header, prev_hash, target, expected_header_hash, height)
             prev_hash = hash_header(header)
 
     @with_lock
@@ -534,7 +556,8 @@ class Blockchain(Logger):
         if constants.net.TESTNET:
             return 0
         if index == -1:
-            return MAX_TARGET
+            # For the first chunk, clamp to powLimit applicable at height 0
+            return get_max_target_for_height(0)
         if index < len(self.checkpoints):
             h, t = self.checkpoints[index]
             return t
@@ -549,7 +572,9 @@ class Blockchain(Logger):
         nTargetTimespan = 14 * 24 * 60 * 60
         nActualTimespan = max(nActualTimespan, nTargetTimespan // 4)
         nActualTimespan = min(nActualTimespan, nTargetTimespan * 4)
-        new_target = min(MAX_TARGET, (target * nActualTimespan) // nTargetTimespan)
+        # Clamp using powLimit applicable for the *next* chunk
+        clamp_limit = get_max_target_for_height((index+1) * CHUNK_SIZE)
+        new_target = min(clamp_limit, (target * nActualTimespan) // nTargetTimespan)
         # not any target can be represented in 32 bits:
         new_target = self.bits_to_target(self.target_to_bits(new_target))
         return new_target
@@ -645,7 +670,7 @@ class Blockchain(Logger):
         except MissingHeader:
             return False
         try:
-            self.verify_header(header, prev_hash, target)
+            self.verify_header(header, prev_hash, target, None, height)
         except BaseException as e:
             return False
         return True
@@ -700,3 +725,4 @@ def get_chains_that_contain_header(height: int, header_hash: str) -> Sequence[Bl
               if chain.check_hash(height=height, header_hash=header_hash)]
     chains = sorted(chains, key=lambda x: x.get_chainwork(), reverse=True)
     return chains
+

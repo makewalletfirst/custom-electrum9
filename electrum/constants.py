@@ -149,6 +149,11 @@ class BitcoinMainnet(AbstractNet):
     DEFAULT_PORTS = {'t': '50001', 's': '50002'}
     BLOCK_HEIGHT_FIRST_LIGHTNING_CHANNELS = 497000
     HEADERS_URL = None
+    CHECKPOINTS = []
+
+    FORK_HEIGHT = 2548  # 실제 포크 블록 높이로 변경
+    POW_LIMIT_PREFORK = 0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+    POW_LIMIT_POSTFORK = 0x0000ffff000000000000000000000000000000000000000000000000000000
 
     XPRV_HEADERS = {
         'standard':    0x0488ade4,  # xprv
