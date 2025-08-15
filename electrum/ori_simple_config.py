@@ -622,37 +622,31 @@ class SimpleConfig(Logger):
 
     # config variables ----->
     NETWORK_AUTO_CONNECT = ConfigVar(
-        'auto_connect', default=False, type_=bool,
+        'auto_connect', default=True, type_=bool,
         short_desc=lambda: _('Select server automatically'),
-        long_desc=lambda: _(
-            "If auto-connect is enabled, Electrum will always use a server that is on the longest blockchain. "
-            "If it is disabled, you have to choose a server you want to use. Electrum will warn you if your server is lagging."),
+        long_desc=lambda: _("If auto-connect is enabled, Electrum will always use a server that is on the longest blockchain. "
+                            "If it is disabled, you have to choose a server you want to use. Electrum will warn you if your server is lagging."),
     )
-
     NETWORK_ONESERVER = ConfigVar(
-        'oneserver', default=True, type_=bool,
+        'oneserver', default=False, type_=bool,
         short_desc=lambda: _('Only connect to one server (full trust)'),
         long_desc=lambda: _(
             "This is only intended for connecting to your own fully trusted server. "
-             "Using this option on a public server is a security risk and is discouraged."
-             "\n\n"
-             "By default, Electrum tries to maintain connections to ~10 servers. "
-             "One of these nodes gets selected to be the history server and will learn the wallet addresses. "
-             "All the other nodes are *only* used for block header notifications. "
-             "\n\n"
-             "Getting block headers from multiple sources is useful to detect lagging servers, chain splits, and forks. "
-             "Chain split detection is security-critical for determining number of confirmations." )
+            "Using this option on a public server is a security risk and is discouraged."
+            "\n\n"
+            "By default, Electrum tries to maintain connections to ~10 servers. "
+            "One of these nodes gets selected to be the history server and will learn the wallet addresses. "
+            "All the other nodes are *only* used for block header notifications. "
+            "\n\n"
+            "Getting block headers from multiple sources is useful to detect lagging servers, chain splits, and forks. "
+            "Chain split detection is security-critical for determining number of confirmations."
+        )
     )
-
-
-
     NETWORK_PROXY = ConfigVar('proxy', default=None, type_=str, convert_getter=lambda v: "none" if v is None else v)
     NETWORK_PROXY_USER = ConfigVar('proxy_user', default=None, type_=str)
     NETWORK_PROXY_PASSWORD = ConfigVar('proxy_password', default=None, type_=str)
     NETWORK_PROXY_ENABLED = ConfigVar('enable_proxy', default=lambda config: config.NETWORK_PROXY not in [None, "none"], type_=bool)
-    
-    NETWORK_SERVER = ConfigVar('server', default='34.64.45.122:50001:t', type_=str)
-    
+    NETWORK_SERVER = ConfigVar('server', default=None, type_=str)
     NETWORK_NOONION = ConfigVar('noonion', default=False, type_=bool)
     NETWORK_OFFLINE = ConfigVar('offline', default=False, type_=bool)
     NETWORK_SKIPMERKLECHECK = ConfigVar('skipmerklecheck', default=False, type_=bool)
