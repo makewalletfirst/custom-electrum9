@@ -152,8 +152,10 @@ class BitcoinMainnet(AbstractNet):
     CHECKPOINTS = []
 
     FORK_HEIGHT = 2548  # 실제 포크 블록 높이로 변경
-    POW_LIMIT_PREFORK  = 0x0000ffff00000000000000000000000000000000000000000000000000000000
-    POW_LIMIT_POSTFORK = 0x0000ffff00000000000000000000000000000000000000000000000000000000
+    POW_LIMIT_PREFORK = 0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff  # 서버 pre-fork와 동일하게 변경
+    POW_LIMIT_POSTFORK = 0x0000ffff00000000000000000000000000000000000000000000000000000000  # 서버 post-fork와 동일 (이미 맞음)
+    SEGWIT_ACTIVATION_HEIGHT = 3000  # SegWit 활성화 높이 추가
+
     XPRV_HEADERS = {
         'standard':    0x0488ade4,  # xprv
         'p2wpkh-p2sh': 0x049d7878,  # yprv
@@ -181,6 +183,12 @@ class BitcoinMainnet(AbstractNet):
     @classmethod
     def datadir_subdir(cls):
         return None
+    @classmethod
+    def POW_LIMIT(cls, height: int) -> int:
+        if height >= cls.FORK_HEIGHT:
+            return cls.POW_LIMIT_POSTFORK
+        else:
+            return cls.POW_LIMIT_PREFORK
 
 
 class BitcoinTestnet(AbstractNet):

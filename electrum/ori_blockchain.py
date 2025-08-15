@@ -41,7 +41,43 @@ HEADER_SIZE = 80  # bytes
 CHUNK_SIZE = 2016  # num headers in a difficulty retarget period
 
 # see https://github.com/bitcoin/bitcoin/blob/feedb9c84e72e4fff489810a2bbeec09bcda5763/src/chainparams.cpp#L76
-MAX_TARGET = 0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff  # compact: 0x1d00ffff
+# NOTE: kept for compatibility/fallback only. Do NOT use directly for consensus checks.
+#MAX_TARGET = 0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff  # compact: 0x1d00ffff
+
+
+# --- powLimit selection based on height (fork-aware) -------------------------
+# Uses values provided by constants.net:
+#   FORK_HEIGHT, POW_LIMIT_PREFORK, POW_LIMIT_POSTFORK
+# Falls back to MAX_TARGET if custom constants are not present.
+
+#def get_max_target_for_height(height: Optional[int]) -> int:
+#    fork_h = getattr(constants.net, 'FORK_HEIGHT', None)
+#    pre = getattr(constants.net, 'POW_LIMIT_PREFORK', MAX_TARGET)
+#    post = getattr(constants.net, 'POW_LIMIT_POSTFORK', pre)
+#    if fork_h is None or height is None:
+#        return pre
+#    return post if height >= fork_h else pre
+def get_max_target_for_height(height: int) -> int:
+    """
+    Return the network-defined powLimit for the *given height*.
+    Pre-fork:  constants.net.POW_LIMIT_PREFORK
+    Post-fork: constants.net.POW_LIMIT_POSTFORK
+    """
+    fork_h = getattr(constants.net, "FORK_HEIGHT", None)
+    if fork_h is None:
+        # Fallback: if no fork height configured, treat as pre-fork limit
+        return constants.net.POW_LIMIT_PREFORK
+    return (constants.net.POW_LIMIT_PREFORK
+            if height < fork_h
+            else constants.net.POW_LIMIT_POSTFORK)
+
+
+assert get_max_target_for_height(0) == constants.net.POW_LIMIT_PREFORK
+assert get_max_target_for_height(getattr(constants.net, "FORK_HEIGHT", 10**9)) == constants.net.POW_LIMIT_POSTFORK
+
+
+
+# ---------------------------------------------------------------------------
 
 
 class MissingHeader(Exception):
@@ -304,30 +340,27 @@ class Blockchain(Logger):
         self._size = os.path.getsize(p)//HEADER_SIZE if os.path.exists(p) else 0
 
     @classmethod
-    def verify_header(cls, header: dict, prev_hash: str, target: int, expected_header_hash: str = None) -> None:
+    def verify_header(cls, header: dict, prev_hash: str, target: int, expected_header_hash: str=None, height: int=None) -> None:
         _hash = hash_header(header)
         if expected_header_hash and expected_header_hash != _hash:
             raise InvalidHeader("hash mismatches with expected: {} vs {}".format(expected_header_hash, _hash))
         if prev_hash != header.get('prev_block_hash'):
             raise InvalidHeader("prev hash mismatch: %s vs %s" % (prev_hash, header.get('prev_block_hash')))
-        #if constants.net.TESTNET:
-        #    return
-        height = header.get('block_height', 0)
-        # 수정: target_to_bits에 height 전달, POW_LIMIT 초과 검사 추가
-        #bits = cls.target_to_bits(target, height=height)
-        #if bits != header.get('bits'):
-        #    raise InvalidHeader("bits mismatch: %s vs %s" % (bits, header.get('bits')))
-        #_pow_hash = pow_hash_header(header)
-        #pow_hash_as_num = int.from_bytes(bfh(_pow_hash), byteorder='big')
-        #if pow_hash_as_num > target:
-        #    raise InvalidHeader(f"insufficient proof of work: {pow_hash_as_num} vs target {target}")
-        # 추가: target이 POW_LIMIT 초과 여부 확인
-        #max_target = constants.net.POW_LIMIT(height)
-        #if target > max_target:
-        #    raise InvalidHeader(f"target {target} exceeds POW_LIMIT {max_target} at height {height}")
-        return
+        if constants.net.TESTNET:
+            return
+        bits = cls.target_to_bits(target)
+        if bits != header.get('bits'):
+            raise InvalidHeader("bits mismatch: %s vs %s" % (bits, header.get('bits')))
 
+        # Height-aware powLimit check
+        max_target = get_max_target_for_height(height)
+        if target > max_target:
+            raise InvalidHeader(f"invalid header: target {hex(target)} > powLimit {hex(max_target)} at height {height}")
 
+        _pow_hash = pow_hash_header(header)
+        pow_hash_as_num = int.from_bytes(bfh(_pow_hash), byteorder='big')
+        if pow_hash_as_num > target:
+            raise InvalidHeader(f"insufficient proof of work: {pow_hash_as_num} vs target {target}")
 
     def verify_chunk(self, index: int, data: bytes) -> None:
         num = len(data) // HEADER_SIZE
@@ -342,7 +375,7 @@ class Blockchain(Logger):
                 expected_header_hash = None
             raw_header = data[i*HEADER_SIZE : (i+1)*HEADER_SIZE]
             header = deserialize_header(raw_header, index*CHUNK_SIZE + i)
-            self.verify_header(header, prev_hash, target, expected_header_hash)
+            self.verify_header(header, prev_hash, target, expected_header_hash, height)
             prev_hash = hash_header(header)
 
     @with_lock
@@ -540,66 +573,57 @@ class Blockchain(Logger):
 
     def get_target(self, index: int) -> int:
         # compute target from chunk x, used in chunk x+1
-        from . import constants
         if constants.net.TESTNET:
             return 0
         if index == -1:
-            return MAX_TARGET
+            # For the first chunk, clamp to powLimit applicable at height 0
+            return get_max_target_for_height(0)
         if index < len(self.checkpoints):
             h, t = self.checkpoints[index]
             return t
-        # 수정: 포크 높이 확인
-        start_height = index * CHUNK_SIZE
-        if start_height >= constants.net.FORK_HEIGHT:
-            # post-fork: no retargeting, return previous chunk's target
-            prev_target = self.get_target(index - 1)
-            return prev_target
-        # pre-fork: 기존 메인넷 난이도 조정 로직
+        # new target
         first = self.read_header(index * CHUNK_SIZE)
-        last = self.read_header((index + 1) * CHUNK_SIZE - 1)
+        last = self.read_header((index+1) * CHUNK_SIZE - 1)
         if not first or not last:
             raise MissingHeader()
         bits = last.get('bits')
-        target = self.bits_to_target(bits, height=(index + 1) * CHUNK_SIZE - 1)
+        target = self.bits_to_target(bits)
         nActualTimespan = last.get('timestamp') - first.get('timestamp')
-        nTargetTimespan = 14 * 24 * 60 * 60  # 2 weeks
+        nTargetTimespan = 14 * 24 * 60 * 60
         nActualTimespan = max(nActualTimespan, nTargetTimespan // 4)
         nActualTimespan = min(nActualTimespan, nTargetTimespan * 4)
-        new_target = min(MAX_TARGET, (target * nActualTimespan) // nTargetTimespan)
-        new_target = self.bits_to_target(self.target_to_bits(new_target, height=(index + 1) * CHUNK_SIZE - 1), height=(index + 1) * CHUNK_SIZE - 1)
+        # Clamp using powLimit applicable for the *next* chunk
+        clamp_limit = get_max_target_for_height((index+1) * CHUNK_SIZE)
+        new_target = min(clamp_limit, (target * nActualTimespan) // nTargetTimespan)
+        # not any target can be represented in 32 bits:
+        new_target = self.bits_to_target(self.target_to_bits(new_target))
         return new_target
 
-
     @classmethod
-    def bits_to_target(cls, bits: int, height: int = 0) -> int:
-        from . import constants
-        max_target = constants.net.POW_LIMIT(height)
+    def bits_to_target(cls, bits: int) -> int:
+        # arith_uint256::SetCompact in Bitcoin Core
         if not (0 <= bits < (1 << 32)):
             raise InvalidHeader(f"bits should be uint32. got {bits!r}")
         bitsN = (bits >> 24) & 0xff
         bitsBase = bits & 0x7fffff
         if bitsN <= 3:
-            target = bitsBase >> (8 * (3 - bitsN))
+            target = bitsBase >> (8 * (3-bitsN))
         else:
-            target = bitsBase << (8 * (bitsN - 3))
+            target = bitsBase << (8 * (bitsN-3))
         if target != 0 and bits & 0x800000 != 0:
+            # Bit number 24 (0x800000) represents the sign of N
             raise InvalidHeader("target cannot be negative")
         if (target != 0 and
                 (bitsN > 34 or
                  (bitsN > 33 and bitsBase > 0xff) or
                  (bitsN > 32 and bitsBase > 0xffff))):
             raise InvalidHeader("target has overflown")
-        if target > max_target:
-            raise InvalidHeader(f"target {target} exceeds POW_LIMIT {max_target} at height {height}")
         return target
 
-
     @classmethod
-    def target_to_bits(cls, target: int, height: int = 0) -> int:
-        from . import constants
-        max_target = constants.net.POW_LIMIT(height)
-        if target > max_target:
-            target = max_target
+    def target_to_bits(cls, target: int) -> int:
+        # arith_uint256::GetCompact in Bitcoin Core
+        # see https://github.com/bitcoin/bitcoin/blob/7fcf53f7b4524572d1d0c9a5fdc388e87eb02416/src/arith_uint256.cpp#L223
         c = target.to_bytes(length=32, byteorder='big')
         bitsN = len(c)
         while bitsN > 0 and c[0] == 0:
@@ -612,8 +636,6 @@ class Blockchain(Logger):
             bitsN += 1
             bitsBase >>= 8
         return bitsN << 24 | bitsBase
-
-
 
     def chainwork_of_header_at_height(self, height: int) -> int:
         """work done by single header at given height"""
@@ -668,7 +690,7 @@ class Blockchain(Logger):
         except MissingHeader:
             return False
         try:
-            self.verify_header(header, prev_hash, target)
+            self.verify_header(header, prev_hash, target, None, height)
         except BaseException as e:
             return False
         return True
@@ -723,3 +745,4 @@ def get_chains_that_contain_header(height: int, header_hash: str) -> Sequence[Bl
               if chain.check_hash(height=height, header_hash=header_hash)]
     chains = sorted(chains, key=lambda x: x.get_chainwork(), reverse=True)
     return chains
+

@@ -310,22 +310,21 @@ class Blockchain(Logger):
             raise InvalidHeader("hash mismatches with expected: {} vs {}".format(expected_header_hash, _hash))
         if prev_hash != header.get('prev_block_hash'):
             raise InvalidHeader("prev hash mismatch: %s vs %s" % (prev_hash, header.get('prev_block_hash')))
-        #if constants.net.TESTNET:
-        #    return
+        if constants.net.TESTNET:
+            return
         height = header.get('block_height', 0)
         # 수정: target_to_bits에 height 전달, POW_LIMIT 초과 검사 추가
-        #bits = cls.target_to_bits(target, height=height)
-        #if bits != header.get('bits'):
-        #    raise InvalidHeader("bits mismatch: %s vs %s" % (bits, header.get('bits')))
-        #_pow_hash = pow_hash_header(header)
-        #pow_hash_as_num = int.from_bytes(bfh(_pow_hash), byteorder='big')
-        #if pow_hash_as_num > target:
-        #    raise InvalidHeader(f"insufficient proof of work: {pow_hash_as_num} vs target {target}")
+        bits = cls.target_to_bits(target, height=height)
+        if bits != header.get('bits'):
+            raise InvalidHeader("bits mismatch: %s vs %s" % (bits, header.get('bits')))
+        _pow_hash = pow_hash_header(header)
+        pow_hash_as_num = int.from_bytes(bfh(_pow_hash), byteorder='big')
+        if pow_hash_as_num > target:
+            raise InvalidHeader(f"insufficient proof of work: {pow_hash_as_num} vs target {target}")
         # 추가: target이 POW_LIMIT 초과 여부 확인
-        #max_target = constants.net.POW_LIMIT(height)
-        #if target > max_target:
-        #    raise InvalidHeader(f"target {target} exceeds POW_LIMIT {max_target} at height {height}")
-        return
+        max_target = constants.net.POW_LIMIT(height)
+        if target > max_target:
+            raise InvalidHeader(f"target {target} exceeds POW_LIMIT {max_target} at height {height}")
 
 
 
