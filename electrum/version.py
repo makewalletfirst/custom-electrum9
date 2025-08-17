@@ -1,4 +1,4 @@
-ELECTRUM_VERSION = "4.6.1+forkclamp2"
+ELECTRUM_VERSION = '4.6.1'
 
 PROTOCOL_VERSION = '1.4'     # protocol version requested
 
