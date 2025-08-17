@@ -1,4 +1,6 @@
-custom electrum 3rd
+custom electrum 4th
 
 
-auto excute
+안드로이드 빌드
+~/electrum/contrib/android$ ./build.sh qml arm64-v8a debug
+
