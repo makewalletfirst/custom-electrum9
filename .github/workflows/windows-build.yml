@@ -1,0 +1,67 @@
+name: Windows build (Wine/Docker)
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+    paths:
+      - '**.py'
+      - 'contrib/**'
+      - 'electrum/**'
+      - 'setup.*'
+      - 'requirements*'
+      - '.github/workflows/windows-build.yml'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true   # (서브모듈 쓰면 true 유지)
+
+      - name: Show environment
+        run: |
+          uname -a
+          docker --version
+          bash --version
+
+      - name: Enable BuildKit
+        run: echo "DOCKER_BUILDKIT=1" >> $GITHUB_ENV
+
+      - name: Build Windows artifacts via Wine/Docker
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 루트 디렉터리에서 스크립트 실행
+          ./contrib/build-wine/build.sh
+
+      - name: Collect build outputs
+        if: always()
+        run: |
+          mkdir -p __artifacts__
+          # 일반적으로 dist/에 산출물(.exe/.zip)이 생성됨
+          if [ -d dist ]; then cp -R dist/* __artifacts__/ || true; fi
+          # 혹시 다른 경로에 생성된다면 필요한 경로를 추가로 복사하세요.
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts-${{ github.run_number }}
+          path: __artifacts__/**
+          if-no-files-found: warn
+          retention-days: 14
+
