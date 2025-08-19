@@ -17,15 +17,28 @@ jobs:
       - name: Cache Buildozer
         uses: actions/cache@v4
         with:
-          key: buildozer-cache-${{ runner.os }}-${{ hashFiles('contrib/android/**', 'setup.py', 'requirements.txt') }}  # Adjust hashFiles to include relevant files that affect the build
+          key: buildozer-cache-${{ runner.os }}-${{ hashFiles('contrib/android/**', 'setup.py', 'requirements.txt') }}
           path: |
             .buildozer_qml
           restore-keys: |
             buildozer-cache-${{ runner.os }}-
 
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -t electrum-android-builder-img \
+            --file contrib/android/Dockerfile \
+            .
+
       - name: Build Android APK
         run: |
-          ./contrib/android/build.sh qml arm64-v8a debug
+          mkdir -p .buildozer_qml/.gradle
+          docker run --rm \
+            -v "$(pwd)":/home/user/wspace/electrum \
+            -v "$(pwd)/.buildozer_qml/.gradle":/home/user/.gradle \
+            --workdir /home/user/wspace/electrum \
+            electrum-android-builder-img \
+            ./contrib/android/make_apk.sh qml arm64-v8a debug
 
       - name: Upload APK artifact
         if: success()
