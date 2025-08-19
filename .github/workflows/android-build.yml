@@ -1,0 +1,35 @@
+name: Android Build Test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache Buildozer
+        uses: actions/cache@v4
+        with:
+          key: buildozer-cache-${{ runner.os }}-${{ hashFiles('contrib/android/**', 'setup.py', 'requirements.txt') }}  # Adjust hashFiles to include relevant files that affect the build
+          path: |
+            .buildozer_qml
+          restore-keys: |
+            buildozer-cache-${{ runner.os }}-
+
+      - name: Build Android APK
+        run: |
+          ./contrib/android/build.sh qml arm64-v8a debug
+
+      - name: Upload APK artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: dist/*.apk
