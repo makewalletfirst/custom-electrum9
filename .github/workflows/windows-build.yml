@@ -1,0 +1,35 @@
+name: Windows Build Test
+
+on:
+  push:
+    branches: [ main ]  # main 브랜치 push 시 실행. 필요에 따라 다른 브랜치 추가
+  pull_request:
+    branches: [ main ]  # PR 시 실행
+
+jobs:
+  build-windows:
+    runs-on: ubuntu-latest  # Ubuntu에서 실행 (build-wine 스크립트가 Linux 기반 Docker/Wine 사용)
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4  # 저장소 코드 체크아웃
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3  # Docker BuildKit 지원 설정 (네 명령어에 DOCKER_BUILDKIT=1 있음)
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wine docker.io  # build-wine에 필요할 수 있는 기본 패키지. 실제로 필요한지 확인해
+        # 만약 Python 의존성이 있으면: pip install -r requirements.txt (requirements.txt가 있으면)
+
+    - name: Build Windows version
+      run: |
+        export DOCKER_BUILDKIT=1
+        ./contrib/build-wine/build.sh  # 네 빌드 명령어 실행. 루트 디렉터리에서 실행됨
+
+    - name: Upload build artifacts (optional)
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-build
+        path: dist/  # 빌드 결과물이 dist/에 저장된다고 가정 (네 ls에 dist 있음). 필요시 경로 변경
