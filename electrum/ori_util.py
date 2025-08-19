@@ -88,28 +88,11 @@ def all_subclasses(cls) -> Set:
 ca_path = certifi.where()
 
 
-# 1) 'BTC'/'mBTC'를 호환용으로 살려두고, 새 표기 'BEC'/'mBEC'도 함께 둡니다.
-base_units = {
-    'BTC': 8,    # ← 호환용(기존 UI/설정이 던져도 통과)
-    'mBTC': 5,   # ← 호환용
-    'bits': 2,
-    'sat': 0,
-    'BEC': 8,    # ← 새 표기
-    'mBEC': 5,   # ← 새 표기
-}
+base_units = {'BTC':8, 'mBTC':5, 'bits':2, 'sat':0}
+base_units_inverse = inv_dict(base_units)
+base_units_list = ['BTC', 'mBTC', 'bits', 'sat']  # list(dict) does not guarantee order
 
-# 2) 역매핑은 표시용이므로 BEC 쪽으로 “강제”합니다.
-base_units_inverse = {8: 'BEC', 5: 'mBEC', 2: 'bits', 0: 'sat'}
-
-# 3) UI 드롭다운에 노출할 순서는 BEC 쪽만 보여주면 됩니다.
-base_units_list = ['BEC', 'mBEC', 'bits', 'sat']
-
-# (선택) 기본 단위가 mBEC(=소수점 5자리)라면 그대로 두시고,
-#        BEC를 기본으로 보이고 싶으면 아래를 8로 바꾸세요.
-DECIMAL_POINT_DEFAULT = 5  # mBEC
-
-
-
+DECIMAL_POINT_DEFAULT = 5  # mBTC
 
 
 class UnknownBaseUnit(Exception): pass
