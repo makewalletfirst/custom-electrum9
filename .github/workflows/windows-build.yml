@@ -33,10 +33,10 @@ jobs:
         echo "DOCKER_BUILDKIT=1" >> $GITHUB_ENV
         echo "COMPOSE_DOCKER_CLI_BUILD=1" >> $GITHUB_ENV
     
-    - name: Install required packages
+    - name: Setup Docker (already available in GitHub Actions)
       run: |
-        sudo apt-get update
-        sudo apt-get install -y docker.io
+        docker --version
+        docker-compose --version
     
     - name: Check build script permissions
       run: |
