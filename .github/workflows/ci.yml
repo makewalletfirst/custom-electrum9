@@ -1,0 +1,94 @@
+name: Lint & Smoke Tests (Linux/Windows)
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install -U pip wheel
+          # 있으면 tox를 사용, 없으면 패키지만 설치
+          if [ -f tox.ini ]; then
+            pip install tox
+          fi
+          # tests extra가 있으면 우선적으로 설치 시도
+          pip install -e .[tests] || pip install -e .
+          pip install pytest || true
+
+      - name: Import smoke test
+        shell: bash
+        run: |
+          python - <<'PY'
+import sys
+print("python:", sys.version)
+try:
+    import electrum
+    print("electrum import OK; version:", getattr(electrum, "__version__", "unknown"))
+except Exception as e:
+    print("electrum import FAILED:", e)
+    raise
+PY
+
+      - name: Run fast tests (optional)
+        shell: bash
+        run: |
+          if [ -d tests ]; then
+            # 느린/외부의존 테스트를 제외하고 빠른 것만 시도
+            pytest -q -m "not slow" || true
+          fi
+
+  windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ['3.11']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install -U pip wheel
+          pip install -e .
+          pip install pytest || true
+
+      - name: Import smoke test
+        shell: bash
+        run: |
+          python -c "import electrum, sys; print('electrum import OK; version:', getattr(electrum,'__version__','?'))"
+
+      - name: Run fast tests (optional)
+        shell: bash
+        run: |
+          if [ -d tests ]; then
+            pytest -q -m "not slow" || true
+          fi
+

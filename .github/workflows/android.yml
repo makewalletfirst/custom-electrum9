@@ -1,0 +1,55 @@
+name: Android (QML) Debug Build
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore: [ '**/*.md', 'docs/**' ]
+  pull_request:
+    paths-ignore: [ '**/*.md', 'docs/**' ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show tool versions
+        run: |
+          docker --version || true
+          python3 --version || true
+          uname -a
+
+      # build.sh 가 내부에서 Docker를 사용하여 전체 빌드를 수행한다는 가정
+      - name: Build Android (qml arm64-v8a debug)
+        shell: bash
+        run: |
+          chmod +x ./contrib/android/build.sh
+          ./contrib/android/build.sh qml arm64-v8a debug
+
+      - name: Locate APKs
+        shell: bash
+        run: |
+          echo "Listing *.apk up to 6 levels..."
+          find . -maxdepth 6 -type f -name "*.apk" -print || true
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apks
+          path: |
+            **/*.apk
+            **/*-debug.apk
+          if-no-files-found: warn
+          retention-days: 7
+
