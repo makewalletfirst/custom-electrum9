@@ -33,22 +33,38 @@ jobs:
         echo "DOCKER_BUILDKIT=1" >> $GITHUB_ENV
         echo "COMPOSE_DOCKER_CLI_BUILD=1" >> $GITHUB_ENV
     
-    - name: Setup Docker (already available in GitHub Actions)
+    - name: Setup Docker environment
       run: |
         docker --version
-        docker-compose --version
+        # Docker가 실행 중인지 확인
+        sudo systemctl status docker || sudo systemctl start docker
+        # Docker 그룹에 현재 사용자 추가 (필요시)
+        sudo usermod -aG docker $USER
     
     - name: Check build script permissions
       run: |
         ls -la contrib/build-wine/build.sh
         chmod +x contrib/build-wine/build.sh
     
+    - name: Debug build environment
+      run: |
+        echo "=== Current directory ==="
+        pwd
+        echo "=== Directory contents ==="
+        ls -la
+        echo "=== Build script check ==="
+        ls -la contrib/build-wine/build.sh
+        echo "=== Docker check ==="
+        docker --version
+        docker info --format "{{.ServerVersion}}" || echo "Docker daemon issue"
+    
     - name: Run Windows build
       run: |
         cd ${{ github.workspace }}
         export DOCKER_BUILDKIT=1
-        ./contrib/build-wine/build.sh
-      timeout-minutes: 60  # 빌드 타임아웃 60분
+        echo "Starting build process..."
+        ./contrib/build-wine/build.sh 2>&1 | tee build.log
+      timeout-minutes: 60
     
     - name: Check build output
       run: |
