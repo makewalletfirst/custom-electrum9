@@ -2,34 +2,78 @@ name: Windows Build Test
 
 on:
   push:
-    branches: [ main ]  # main 브랜치 push 시 실행. 필요에 따라 다른 브랜치 추가
+    branches: [ main, master, develop ]
   pull_request:
-    branches: [ main ]  # PR 시 실행
+    branches: [ main, master, develop ]
+  workflow_dispatch: # 수동 실행 가능
 
 jobs:
-  build-windows:
-    runs-on: ubuntu-latest  # Ubuntu에서 실행 (build-wine 스크립트가 Linux 기반 Docker/Wine 사용)
-
+  windows-build:
+    runs-on: ubuntu-latest
+    
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4  # 저장소 코드 체크아웃
-
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 전체 히스토리를 가져와서 빌드에 필요한 정보 확보
+    
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3  # Docker BuildKit 지원 설정 (네 명령어에 DOCKER_BUILDKIT=1 있음)
-
-    - name: Install dependencies
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Cache Docker layers
+      uses: actions/cache@v3
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
+    
+    - name: Enable Docker BuildKit
+      run: |
+        echo "DOCKER_BUILDKIT=1" >> $GITHUB_ENV
+        echo "COMPOSE_DOCKER_CLI_BUILD=1" >> $GITHUB_ENV
+    
+    - name: Install required packages
       run: |
         sudo apt-get update
-        sudo apt-get install -y wine docker.io  # build-wine에 필요할 수 있는 기본 패키지. 실제로 필요한지 확인해
-        # 만약 Python 의존성이 있으면: pip install -r requirements.txt (requirements.txt가 있으면)
-
-    - name: Build Windows version
+        sudo apt-get install -y docker.io
+    
+    - name: Check build script permissions
       run: |
+        ls -la contrib/build-wine/build.sh
+        chmod +x contrib/build-wine/build.sh
+    
+    - name: Run Windows build
+      run: |
+        cd ${{ github.workspace }}
         export DOCKER_BUILDKIT=1
-        ./contrib/build-wine/build.sh  # 네 빌드 명령어 실행. 루트 디렉터리에서 실행됨
-
-    - name: Upload build artifacts (optional)
+        ./contrib/build-wine/build.sh
+      timeout-minutes: 60  # 빌드 타임아웃 60분
+    
+    - name: Check build output
+      run: |
+        echo "=== Build completed, checking output ==="
+        ls -la dist/ || echo "dist directory not found"
+        find . -name "*.exe" -type f || echo "No .exe files found"
+        find . -name "electrum*" -type f | head -20
+    
+    - name: Upload build artifacts
       uses: actions/upload-artifact@v4
+      if: always()  # 빌드가 실패해도 아티팩트 업로드 시도
       with:
-        name: windows-build
-        path: dist/  # 빌드 결과물이 dist/에 저장된다고 가정 (네 ls에 dist 있음). 필요시 경로 변경
+        name: electrum-windows-build-${{ github.sha }}
+        path: |
+          dist/
+          *.exe
+        retention-days: 7
+    
+    - name: Upload build logs
+      uses: actions/upload-artifact@v4
+      if: failure()  # 빌드 실패시 로그 업로드
+      with:
+        name: build-logs-${{ github.sha }}
+        path: |
+          *.log
+          build*.log
+          /tmp/*.log
+        retention-days: 3
