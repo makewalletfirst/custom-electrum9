@@ -1,2 +1,2 @@
 # custom-electrum9
-for window workflows
+app name change and android build workflows
